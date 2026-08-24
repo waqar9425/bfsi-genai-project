@@ -1,0 +1,66 @@
+name: CI
+
+# Fast tier: runs on every push and pull request. Cheap, deterministic
+# logic tests + a real Docker build/smoke-test -- this is the piece
+# that couldn't be verified locally (Milestone 15, no Docker in the dev
+# sandbox), now actually exercised on real infrastructure.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Third-party actions pinned to a major version tag, not @main/@latest
+      # -- an action's maintainer pushing to their default branch is a real
+      # supply-chain vector; pinning (ideally to a commit SHA for anything
+      # security-sensitive) is standard practice, not paranoia.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run pytest
+        env:
+          PYTHONPATH: src
+          # Needed here, not just in the docker job below -- importing ANY
+          # specialist module (several test files do, transitively)
+          # triggers the MCP subprocess bootstrap (Milestone 12), which
+          # needs this for the RAG embeddings client. Secrets are only
+          # ever referenced via the `secrets` context, never written
+          # directly in the workflow -- GitHub also auto-redacts any
+          # secret value that happens to appear in logs.
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: pytest tests/ -v
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t argus:ci .
+      - name: Smoke test -- boot the real container, poll /health
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: |
+          docker run -d --name argus-smoke -p 8000:8000 -e GOOGLE_API_KEY="$GOOGLE_API_KEY" argus:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null; then
+              echo "Container became healthy after ${i}s"
+              curl -s http://localhost:8000/health
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Container never became healthy within 30s -- dumping logs:"
+          docker logs argus-smoke
+          exit 1
+      - name: One real end-to-end request through the container
+        run: |
+          curl -sf -X POST http://localhost:8000/chat \
+            -H "Content-Type: application/json" \
+            -d '{"message": "Is water damage from a burst pipe covered?"}' | tee /dev/stderr | grep -q '"paused":false'

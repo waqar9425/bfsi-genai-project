@@ -1,0 +1,32 @@
+name: Eval Gate
+
+# Slow tier -- deliberately NOT on every push/PR, matching eval_gate.py's
+# own docstring (Milestone 14): real LLM calls, real MCP tools, an
+# LLM-as-judge call. Meant to gate a merge or run nightly, not fire on
+# every commit. This workflow is the literal materialization of that
+# two-tier design decision, not a new one made just for CI.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}  # manual "Run workflow" button in the Actions tab
+  schedule:
+    - cron: "0 6 * * *"  # nightly, 6am UTC
+
+jobs:
+  eval-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run the eval gate
+        env:
+          PYTHONPATH: src
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        # eval_gate.py already returns a real 0/1 exit code (Milestone 14,
+        # verified both directions) -- nothing extra needed here for
+        # GitHub Actions to correctly mark this job passed/failed.
+        run: python -m argus.eval_gate
