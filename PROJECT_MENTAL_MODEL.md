@@ -174,6 +174,11 @@ src/argus/
   mcp_client.py       Fetches tool objects from mcp_server.py at each
                      specialist's import time (asyncio.run() bootstrap,
                      same "build once" pattern as llm.py's client).
+                     Explicitly passes GOOGLE_API_KEY to the subprocess
+                     via StdioServerParameters' env field (Milestone 15
+                     fix) -- the MCP SDK does NOT inherit the parent
+                     process's environment by default, on purpose (a
+                     security allowlist, see Section 7).
   guardrails.py      PII/KYC redaction (regex-based), runs as the very
                      first node in graph.py, before any LLM sees a raw
                      user message.
@@ -348,12 +353,35 @@ project phase, after the agentic build is further along.
   learned. Recognized the error immediately, fixed the same way (import
   at true top-level). The rule doesn't propagate on its own; every new
   file that imports these specialists has to apply it deliberately.
+- **The MCP SDK does NOT inherit the parent process's environment --
+  deliberately, a security allowlist.** Milestone 15: a Docker-simulation
+  test (no `.env` file anywhere, only injected env vars) crashed with
+  `GOOGLE_API_KEY not set` INSIDE the MCP server subprocess. Root cause,
+  found by reading the actual SDK source: `get_default_environment()`
+  only passes `HOME`/`LOGNAME`/`PATH`/`SHELL`/`TERM`/`USER` through by
+  default -- an MCP server may be a third-party process, so the SDK
+  refuses to forward secrets to it automatically. This RETROACTIVELY
+  explains Milestone 12's `PYTHONPATH` fix too -- same root cause, never
+  connected until this milestone, masked every earlier time because a
+  real `.env` file was always on disk for the subprocess's OWN
+  `load_dotenv()` to find independently. Fixed by passing
+  `GOOGLE_API_KEY` explicitly via `StdioServerParameters`' `env` field
+  (merges ON TOP of the safe defaults) -- deliberately not passing
+  `os.environ` wholesale, which would defeat the allowlist's purpose.
 
 ---
 
 ## 8. Status as of last update
 
-**Milestone 14 complete.** All four specialists real and working, shared
+**Milestone 15 in progress.** Dockerfile and `.dockerignore` written and
+reasoned through (layer-caching order, `--host 0.0.0.0` requirement,
+`.env` excluded for real security reasons). A real container-relevant bug
+(MCP subprocess env isolation, above) found and fixed via local
+simulation, since no Docker/Podman is available in this sandbox. A real
+`docker build`/`docker run` against the Dockerfile hasn't happened yet --
+next: Docker/Podman fundamentals, then real verification once available.
+
+**Everything through Milestone 14 stays complete and unaffected:** All four specialists real and working, shared
 harness (retry/escalation + a correctly PER-TURN turn budget, now async
 and MCP-aware), one cross-agent handoff (Claims → Fraud via `Command`),
 real RAG (Policy), structured per-agent decisions fanned out to an audit
@@ -373,5 +401,7 @@ API response-shaping + the eval gate's own pass/fail logic + RAG
 retrieval hit-rate, still zero LLM-generation calls for the bulk of the
 suite -- only `test_rag_evals.py` makes real embedding calls).
 
-**Not built yet:** Langfuse observability, Docker, CI/CD. Full planned
-order is in `LEARNING_NOTES.md`'s milestone list.
+**Not built yet:** Langfuse observability, CI/CD, and real Docker
+build/run verification (Dockerfile written, untested against an actual
+container runtime -- see Milestone 15 above). Full planned order is in
+`LEARNING_NOTES.md`'s milestone list.

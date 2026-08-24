@@ -1,0 +1,26 @@
+# .env is the security-critical exclusion here, not a housekeeping one.
+# Docker image layers are immutable and additive -- if .env were COPYed
+# into an early layer and then "deleted" in a later one, the API key
+# would STILL be recoverable from the image's layer history (`docker
+# history`, or just `docker save` + inspect the tarball) -- deleting a
+# file in a later layer only hides it from the final filesystem VIEW, it
+# does not remove it from the earlier layer's contents. The only correct
+# fix is never COPYing it into any layer in the first place. The real key
+# gets injected at `docker run -e GOOGLE_API_KEY=...` or
+# `--env-file .env` instead -- both are pure runtime mechanisms, entirely
+# separate from the image build, so the secret never touches a layer.
+.env
+
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.pytest_cache/
+*.egg-info/
+
+# Test code and docs don't belong in a production image -- smaller
+# image, and no reason to ship internal learning notes to whatever
+# registry this eventually gets pushed to.
+tests/
+*.md

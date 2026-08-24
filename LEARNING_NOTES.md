@@ -952,7 +952,59 @@ not a rubber-stamp.
 
 ---
 
-## Milestone 15 — coming next
-Dockerize: a Dockerfile for the FastAPI app + MCP server(s) together --
-the real deployable shape, containerizing what Milestone 13 built rather
-than the plain-import-time script assumptions used so far.
+## Milestone 15 — Dockerize (in progress -- Dockerfile written, real build/run pending)
+
+**Files:** `Dockerfile` (new), `.dockerignore` (new), `mcp_client.py` (fixed)
+
+### Environment constraint, handled by asking rather than working around solo
+No Docker/Podman available in this sandbox, no passwordless sudo to
+install one. First instinct was to build an elaborate local simulation
+(fresh venv, `env -i`, a mirrored directory) to verify as much as
+possible anyway -- corrected mid-stream: should have stopped and asked
+how to proceed as soon as the constraint was clear, not silently kept
+running tool calls solo. Course-corrected on direct feedback.
+
+### A real bug the simulation surfaced anyway -- worth having built it
+Despite the detour, the simulation (a directory with only what the
+Dockerfile's COPY steps bring in, zero `.env` file anywhere, API key
+injected purely as an environment variable) genuinely reproduced a real
+container-relevant bug: the app crashed with `GOOGLE_API_KEY not set`
+INSIDE the MCP server subprocess, even though the parent process had it.
+
+**Root cause, found by reading the actual library source, not guessed:**
+`mcp/client/stdio/__init__.py`'s `get_default_environment()` is a
+deliberate SECURITY ALLOWLIST -- the stdio launcher does not inherit the
+parent process's full environment. On Linux it passes through exactly six
+variables (`HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`) and nothing
+else, by design: an MCP server may be a third-party, less-trusted
+process, and blindly forwarding secrets to every tool server you launch
+would be a real security hole.
+
+**This reframes Milestone 12's PYTHONPATH fix, not just explains a new
+bug.** The `sys.path.insert()` fix in `mcp_server.py` wasn't fixing an
+isolated subprocess quirk -- it was working around this exact allowlist,
+just via a different route (making the server self-sufficient instead of
+passing the variable through). Never connected the two until this
+milestone's testing forced the allowlist itself into view. Every earlier
+test had a real `.env` file on disk, which the subprocess's OWN
+`load_dotenv()` call found independently -- masking that env-var
+inheritance was never happening at all, the whole time.
+
+**Fix:** `StdioServerParameters` accepts an `env` field that MERGES on
+top of the safe default set (verified by reading the exact merge line:
+`{**get_default_environment(), **server.env}`) -- not a full override.
+`mcp_client.py` now passes `GOOGLE_API_KEY` through explicitly via this
+mechanism. Deliberately did NOT pass `os.environ` wholesale, which would
+defeat the entire point of the allowlist -- pass only what's actually
+needed, preserving the security property rather than working around it.
+Re-verified against the exact scenario that broke: same isolated,
+no-`.env` environment, now boots cleanly and correctly answers a real
+`search_policy_docs` question (the tool whose subprocess needs the key).
+
+### Still pending
+The Dockerfile itself is written and reasoned through carefully (layer
+caching order, `--host 0.0.0.0` requirement, `.env` excluded from the
+image for real security reasons -- Docker layers are immutable, a
+"deleted" secret in a later layer is still recoverable from an earlier
+one). A real `docker build`/`docker run` against it hasn't happened yet
+-- next step, once Docker/Podman fundamentals are covered.
