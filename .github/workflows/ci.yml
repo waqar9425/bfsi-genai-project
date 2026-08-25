@@ -62,6 +62,23 @@ jobs:
           exit 1
       - name: One real end-to-end request through the container
         run: |
-          curl -sf -X POST http://localhost:8000/chat \
+          RESPONSE=$(curl -sf -X POST http://localhost:8000/chat \
             -H "Content-Type: application/json" \
-            -d '{"message": "Is water damage from a burst pipe covered?"}' | tee /dev/stderr | grep -q '"paused":false'
+            -d '{"message": "Is water damage from a burst pipe covered?"}')
+          echo "$RESPONSE"
+          # Assert the container served a WELL-FORMED response -- NOT that
+          # the underlying LLM/tool calls succeeded. A normal answer and a
+          # "paused, needs human review" escalation are BOTH the harness
+          # working correctly (Milestone 4's whole design) -- asserting on
+          # which ONE happened makes a smoke test fragile to a third-party
+          # API's availability, which has nothing to do with whether the
+          # deployment itself is correct. Caught live: this exact assertion
+          # (grep for "paused":false) failed a real CI run when a tool call
+          # transiently failed and correctly escalated instead of crashing.
+          echo "$RESPONSE" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          assert 'thread_id' in data, 'malformed response: missing thread_id'
+          assert 'reply' in data, 'malformed response: missing reply'
+          print('response is well-formed --', 'escalated' if data.get('paused') else 'answered normally')
+          "

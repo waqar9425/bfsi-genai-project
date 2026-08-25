@@ -5,9 +5,14 @@ name: Eval Gate
 # LLM-as-judge call. Meant to gate a merge or run nightly, not fire on
 # every commit. This workflow is the literal materialization of that
 # two-tier design decision, not a new one made just for CI.
+#
+# Originally also triggered on push to main -- removed after a real run
+# showed why: it fired CONCURRENTLY with ci.yml on the same push, both
+# hitting the same free-tier API key at once, and a genuine transient
+# quota failure took down both runs simultaneously. Manual + nightly only
+# is also just a more honest match for "merge-time/nightly, not every
+# commit" than "every push to main" ever really was.
 on:
-  push:
-    branches: [main]
   workflow_dispatch: {}  # manual "Run workflow" button in the Actions tab
   schedule:
     - cron: "0 6 * * *"  # nightly, 6am UTC
