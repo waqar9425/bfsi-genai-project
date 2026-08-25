@@ -1070,6 +1070,28 @@ against a REST API is a genuinely bad pattern -- should have used a
 single longer-interval check or just pointed at the Actions UI directly,
 not repeated tight polling.
 
+### Closed out: real local Docker, verified end to end
+Docker Engine installed for real (`docker.io` via apt, WSL2 has no
+`systemd` so the daemon was started directly with `sudo dockerd &`
+rather than via `service`/`systemctl` -- full story in the new
+`CONTAINERS_AND_CICD_CONCEPTS.md`). Built `argus:local` and ran it for
+real, on real hardware, for the first time:
+```
+docker ps  →  Up About a minute (healthy)   0.0.0.0:8000->8000/tcp
+curl http://localhost:8000/chat -d '{"message": "Is water damage from a burst pipe covered?"}'
+→ {"reply":"Yes, water damage from a sudden and accidental discharge...
+   is covered under standard homeowners policies [COV-WATER-01]...",
+   "paused":false,"agent_turns":1,"total_tokens_used":1722,
+   "audit_log":["[AUDIT] agent=policy decision=covered ..."]}
+```
+Every piece that made this work was reasoned about and fixed at some
+earlier milestone -- the async MCP bootstrap (12), the env-var
+inheritance fix (15), `--host 0.0.0.0` (15), the harness and compliance
+logging (4, 8) -- and it held together correctly the first time it ran
+for real, not simulated. This closes the one item that had stayed
+open since Milestone 15 (real Docker verification, blocked on no local
+Docker being available) -- now genuinely done, not just CI-verified.
+
 ---
 
 ## Phase D — pivot to classical ML models

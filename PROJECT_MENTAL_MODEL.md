@@ -1,8 +1,9 @@
 # Argus — Project Mental Model
 
 The "what is this thing, actually" reference. Read this alongside
-`LANGGRAPH_CONCEPTS.md` (the framework mechanics) -- this file is the
-domain + architecture + "which file does what" side of the picture.
+`LANGGRAPH_CONCEPTS.md` (the agent framework mechanics) and
+`CONTAINERS_AND_CICD_CONCEPTS.md` (Docker/Podman/CI-CD mechanics) --
+this file is the domain + architecture + "which file does what" side.
 
 **Updated after every milestone.**
 
@@ -417,17 +418,21 @@ project phase, after the agentic build is further along.
 
 ## 8. Status as of last update
 
-**Milestone 15+16 (Dockerize + CI/CD) landed together** -- pulled
-forward and merged on purpose, since verifying the Dockerfile genuinely
-required the CI pipeline (no Docker/Podman available in the local dev
-sandbox at all, no passwordless sudo to install one). Pushed the project
-to a real GitHub repo (`waqar9425/bfsi-genai-project`) and let GitHub
-Actions' hosted runners (real Docker, preinstalled) do actual
-`docker build`/`docker run` -- confirmed working on genuinely clean
-infrastructure for the first time, not simulated. Two real bugs found
-from actual CI failures and fixed (both above); this closes out the
-planned agentic-build roadmap (Milestones 0-16) -- next is Phase D,
-swapping the mocked tools for real trained models.
+**Milestone 15+16 (Dockerize + CI/CD) complete, INCLUDING real local
+verification** -- pulled forward and merged on purpose, since verifying
+the Dockerfile genuinely required the CI pipeline first (no Docker
+locally in this sandbox). Pushed the project to a real GitHub repo
+(`waqar9425/bfsi-genai-project`), GitHub Actions confirmed the Dockerfile
+builds/runs on real infrastructure, then Docker Engine got installed for
+real on the actual dev machine (WSL2, no `systemd` -- daemon started
+directly via `sudo dockerd`, full story in `CONTAINERS_AND_CICD_CONCEPTS.md`)
+and `argus:local` was built and run for real, hit with a real `curl`,
+answered a real grounded question, correctly. Every piece that made that
+work -- async MCP bootstrap, the env-var fix, `--host 0.0.0.0`, the
+harness, compliance logging -- held together on the first real end-to-end
+run. Real bugs found from actual CI failures and fixed (both above); this
+closes out the planned agentic-build roadmap (Milestones 0-16) -- next is
+Phase D, swapping the mocked tools for real trained models.
 
 **Everything through Milestone 14 stays complete and unaffected:** All four specialists real and working, shared
 harness (retry/escalation + a correctly PER-TURN turn budget, now async
