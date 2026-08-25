@@ -150,6 +150,32 @@ Real model swap (Section 6) will happen entirely inside this box.
 ## 5. File map
 
 ```
+(repo root)
+  Dockerfile           Milestone 15 -- containerizes the FastAPI app AND
+                       the MCP server together (MCP uses stdio transport,
+                       so the server is a subprocess, not a separate
+                       network service -- one container, not several).
+                       Runs as a non-root user, has a HEALTHCHECK against
+                       /health. Verified building successfully on real
+                       Docker via GitHub Actions (no Docker available in
+                       the local dev sandbox).
+  .dockerignore        Excludes .env from the image for real security
+                       reasons -- Docker layers are immutable, a
+                       "deleted" secret in a later layer is still
+                       recoverable from an earlier one.
+  .github/workflows/
+    ci.yml               Fast tier -- every push/PR: pytest + a real
+                         docker build + a real smoke test (boot the
+                         container, poll /health, one real end-to-end
+                         request). Asserts the response is WELL-FORMED,
+                         not a specific business outcome (fixed after a
+                         real run showed why -- Section 7).
+    eval-gate.yml         Slow tier -- eval_gate.py (Milestone 14), on
+                         manual dispatch + nightly only. NOT on every
+                         push -- removed after a real run showed it
+                         firing concurrently with ci.yml on the same
+                         push caused real quota contention.
+
 src/argus/
   state.py          The State schema every graph shares: messages, intent,
                      needs_escalation, decisions, audit_log.
@@ -368,18 +394,40 @@ project phase, after the agentic build is further along.
   `GOOGLE_API_KEY` explicitly via `StdioServerParameters`' `env` field
   (merges ON TOP of the safe defaults) -- deliberately not passing
   `os.environ` wholesale, which would defeat the allowlist's purpose.
+- **A CI smoke test asserted a business outcome, not deployment health.**
+  Milestone 16: a real CI run hit a transient tool failure; the harness
+  correctly escalated instead of crashing (exactly the Milestone 4
+  design, working as intended) -- and the smoke test FAILED anyway,
+  because it grepped for `"paused":false` instead of checking the
+  response was well-formed. A smoke test should assert the deployment is
+  up and responding correctly, never a specific outcome that depends on
+  a third-party API's availability at that exact second.
+- **Two workflows on the same trigger compete for the same quota.**
+  `eval-gate.yml` firing on every push to `main`, same moment as
+  `ci.yml`, meant both hit the same free-tier API key concurrently --
+  the direct cause of the failure above. Removed the push trigger;
+  manual + nightly only, which was the actual intent all along.
+- **An unauthenticated polling loop against a REST API burns its rate
+  limit fast.** Checking GitHub Actions run status via repeated
+  `curl`+`sleep` calls exhausted the 60-req/hour unauthenticated limit in
+  one loop -- should have used one longer-interval check, or just pointed
+  at the Actions UI directly rather than polling from here at all.
 
 ---
 
 ## 8. Status as of last update
 
-**Milestone 15 in progress.** Dockerfile and `.dockerignore` written and
-reasoned through (layer-caching order, `--host 0.0.0.0` requirement,
-`.env` excluded for real security reasons). A real container-relevant bug
-(MCP subprocess env isolation, above) found and fixed via local
-simulation, since no Docker/Podman is available in this sandbox. A real
-`docker build`/`docker run` against the Dockerfile hasn't happened yet --
-next: Docker/Podman fundamentals, then real verification once available.
+**Milestone 15+16 (Dockerize + CI/CD) landed together** -- pulled
+forward and merged on purpose, since verifying the Dockerfile genuinely
+required the CI pipeline (no Docker/Podman available in the local dev
+sandbox at all, no passwordless sudo to install one). Pushed the project
+to a real GitHub repo (`waqar9425/bfsi-genai-project`) and let GitHub
+Actions' hosted runners (real Docker, preinstalled) do actual
+`docker build`/`docker run` -- confirmed working on genuinely clean
+infrastructure for the first time, not simulated. Two real bugs found
+from actual CI failures and fixed (both above); this closes out the
+planned agentic-build roadmap (Milestones 0-16) -- next is Phase D,
+swapping the mocked tools for real trained models.
 
 **Everything through Milestone 14 stays complete and unaffected:** All four specialists real and working, shared
 harness (retry/escalation + a correctly PER-TURN turn budget, now async
@@ -401,7 +449,6 @@ API response-shaping + the eval gate's own pass/fail logic + RAG
 retrieval hit-rate, still zero LLM-generation calls for the bulk of the
 suite -- only `test_rag_evals.py` makes real embedding calls).
 
-**Not built yet:** Langfuse observability, CI/CD, and real Docker
-build/run verification (Dockerfile written, untested against an actual
-container runtime -- see Milestone 15 above). Full planned order is in
-`LEARNING_NOTES.md`'s milestone list.
+**Not built yet:** Langfuse observability. That's it from the original
+agentic-build roadmap -- next up is Phase D, swapping the mocked tools
+in `tools/*.py` for real trained models, per the blueprint's Section 07.
