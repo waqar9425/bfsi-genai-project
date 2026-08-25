@@ -27,6 +27,15 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r requirements.txt
+      # The 4 files ci.yml excludes from its every-push tier (import-time
+      # API cost, not a need for live access in their own tests -- see
+      # ci.yml) run here in FULL, not skipped anywhere -- this tier
+      # already expects real API cost, so paying it here is free.
+      - name: Run full pytest suite (including the 4 files ci.yml skips)
+        env:
+          PYTHONPATH: src
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: pytest tests/ -v
       - name: Run the eval gate
         env:
           PYTHONPATH: src

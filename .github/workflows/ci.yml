@@ -25,18 +25,33 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run pytest
+      # 4 files excluded here, NOT because their own tests need live API
+      # access (they don't -- pure logic in every one) but because
+      # importing them cascades: argus.graph/argus.agents.* -> all 4
+      # specialists -> get_mcp_tools() at each specialist's top level ->
+      # an MCP server subprocess per specialist -> which imports ALL 5
+      # tools unconditionally -> policy_tools.py's real embedding call at
+      # IMPORT time. An eager-init architecture issue, not an "LLM test"
+      # issue -- real fix would be making tool-fetching lazy; out of
+      # scope for now. These 4 still run in full, just in eval-gate.yml's
+      # nightly/manual tier instead, where paying that cost less often is
+      # already the accepted tradeoff -- nothing here is permanently
+      # skipped, only moved to the tier that already expects this cost.
+      - name: Run pytest (fast tier -- excludes the 4 files with import-time API cost)
         env:
           PYTHONPATH: src
-          # Needed here, not just in the docker job below -- importing ANY
-          # specialist module (several test files do, transitively)
-          # triggers the MCP subprocess bootstrap (Milestone 12), which
-          # needs this for the RAG embeddings client. Secrets are only
+          # Still needed -- test_rag_evals.py makes real (light) embedding
+          # calls on purpose, and stays in this tier. Secrets are only
           # ever referenced via the `secrets` context, never written
           # directly in the workflow -- GitHub also auto-redacts any
           # secret value that happens to appear in logs.
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-        run: pytest tests/ -v
+        run: >
+          pytest tests/ -v
+          --ignore=tests/test_graph_milestone0.py
+          --ignore=tests/test_skills.py
+          --ignore=tests/test_api.py
+          --ignore=tests/test_eval_gate.py
 
   docker-build:
     runs-on: ubuntu-latest
