@@ -2,20 +2,21 @@ name: Eval Gate
 
 # Slow tier -- deliberately NOT on every push/PR, matching eval_gate.py's
 # own docstring (Milestone 14): real LLM calls, real MCP tools, an
-# LLM-as-judge call. Meant to gate a merge or run nightly, not fire on
-# every commit. This workflow is the literal materialization of that
-# two-tier design decision, not a new one made just for CI.
+# LLM-as-judge call. Meant to gate a merge, not fire on every commit.
+# This workflow is the literal materialization of that two-tier design
+# decision, not a new one made just for CI.
 #
 # Originally also triggered on push to main -- removed after a real run
 # showed why: it fired CONCURRENTLY with ci.yml on the same push, both
 # hitting the same free-tier API key at once, and a genuine transient
-# quota failure took down both runs simultaneously. Manual + nightly only
-# is also just a more honest match for "merge-time/nightly, not every
-# commit" than "every push to main" ever really was.
+# quota failure took down both runs simultaneously.
+#
+# Also originally ran nightly via `schedule: cron`, on top of manual --
+# removed that too: a free-tier API key doesn't need a daily automatic
+# run burning quota with nobody watching, and manual "Run workflow" is
+# enough to gate a merge on demand.
 on:
   workflow_dispatch: {}  # manual "Run workflow" button in the Actions tab
-  schedule:
-    - cron: "0 6 * * *"  # nightly, 6am UTC
 
 jobs:
   eval-gate:
